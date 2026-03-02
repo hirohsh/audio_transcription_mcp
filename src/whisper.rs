@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use tracing::info;
 
-const WHISPER_N_MELS: usize = 80;
+const WHISPER_N_FFT: usize = 400;
 const MAX_DECODE_STEPS: usize = 448;
 
 pub struct WhisperModel {
@@ -15,6 +15,7 @@ pub struct WhisperModel {
     decoder: Mutex<Session>,
     tokenizer: WhisperTokenizer,
     mel_filters: Vec<f32>,
+    n_mels: usize,
 }
 
 impl WhisperModel {
@@ -40,9 +41,12 @@ impl WhisperModel {
         let tokenizer = WhisperTokenizer::new(model_dir)?;
 
         let mel_filters = load_mel_filters(&mel_filters_path)?;
+        let n_freq = WHISPER_N_FFT / 2 + 1;
+        let n_mels = mel_filters.len() / n_freq;
         info!(
-            "Models loaded successfully. Mel filters: {} values",
-            mel_filters.len()
+            "Models loaded successfully. Mel filters: {} values ({} mels)",
+            mel_filters.len(),
+            n_mels
         );
 
         Ok(Self {
@@ -50,6 +54,7 @@ impl WhisperModel {
             decoder: Mutex::new(decoder),
             tokenizer,
             mel_filters,
+            n_mels,
         })
     }
 
@@ -110,21 +115,13 @@ impl WhisperModel {
         Self::ensure_ort_dylib_path();
         info!("Initializing ONNX Runtime...");
 
-        // Try GPU execution providers first, fall back to CPU
+        // NOTE: CoreML EP is disabled on macOS due to incompatibility with
+        // external data files (ort 2.0.0-rc.11 + ONNX Runtime 1.24.x).
+        // CoreML's graph optimizer fails with "model_path must not be empty"
+        // when partitioning models that use external .onnx_data files.
         #[cfg(target_os = "macos")]
         {
-            info!("macOS detected: trying CoreML execution provider");
-            let ok = ort::init()
-                .with_execution_providers([
-                    ort::execution_providers::CoreMLExecutionProvider::default().build(),
-                ])
-                .commit();
-            if ok {
-                info!("ONNX Runtime initialized with CoreML (GPU)");
-                return Ok(());
-            } else {
-                info!("CoreML not available, falling back to CPU");
-            }
+            info!("macOS detected: CoreML EP disabled (incompatible with external data files), using CPU");
         }
 
         #[cfg(target_os = "windows")]
@@ -194,12 +191,12 @@ impl WhisperModel {
 
     fn transcribe_chunk(&self, samples: &[f32], language: Option<&str>) -> Result<String> {
         // Compute mel spectrogram
-        let mel = mel::log_mel_spectrogram(samples, &self.mel_filters)?;
-        let mel_padded = mel::pad_or_trim_mel(&mel, WHISPER_N_MELS);
+        let mel = mel::log_mel_spectrogram(samples, &self.mel_filters, self.n_mels)?;
+        let mel_padded = mel::pad_or_trim_mel(&mel, self.n_mels);
 
         // Run encoder: input shape [1, n_mels, n_frames]
         let mel_tensor = Tensor::from_array((
-            [1_usize, WHISPER_N_MELS, N_FRAMES],
+            [1_usize, self.n_mels, N_FRAMES],
             mel_padded.into_boxed_slice(),
         ))?;
 

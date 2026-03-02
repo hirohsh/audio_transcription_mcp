@@ -9,9 +9,9 @@ pub struct WhisperTokenizer {
 // Whisper special token IDs
 pub const SOT_TOKEN: u32 = 50258;
 pub const EOT_TOKEN: u32 = 50257;
-pub const _TRANSLATE_TOKEN: u32 = 50358;
-pub const TRANSCRIBE_TOKEN: u32 = 50359;
-pub const NO_TIMESTAMPS_TOKEN: u32 = 50363;
+pub const _TRANSLATE_TOKEN: u32 = 50359;
+pub const TRANSCRIBE_TOKEN: u32 = 50360;
+pub const NO_TIMESTAMPS_TOKEN: u32 = 50364;
 
 /// Language code to Whisper token ID mapping
 pub fn language_token(lang: &str) -> Option<u32> {

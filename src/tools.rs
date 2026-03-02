@@ -68,7 +68,7 @@ impl TranscriptionService {
             info!("Loading Whisper ONNX model (first request)...");
             let model = WhisperModel::new(&inner.config.model_dir)
                 .with_context(|| format!(
-                    "Failed to load Whisper model from {}. Run: cd model_converter && uv run convert --model-size base --output-dir ../models",
+                    "Failed to load Whisper model from {}. Run: cd model_converter && uv run convert --output-dir ../models",
                     inner.config.model_dir.display()
                 ))?;
             info!("Whisper model loaded successfully");

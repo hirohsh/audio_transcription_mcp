@@ -22,9 +22,10 @@ MODEL_NAMES = {
 def export_mel_filters(processor: WhisperProcessor, output_dir: Path) -> None:
     """Export mel filterbank from the Whisper feature extractor."""
     feature_extractor = processor.feature_extractor
-    mel_filters = feature_extractor.mel_filters
+    mel_filters = feature_extractor.mel_filters  # shape: (n_freq, n_mels)
 
-    # mel_filters shape: [n_mels, n_freq] = [80, 201]
+    # Transpose to (n_mels, n_freq) for row-major flatten
+    mel_filters = mel_filters.T
     mel_list = mel_filters.flatten().tolist()
 
     output_path = output_dir / "mel_filters.json"
