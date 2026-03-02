@@ -8,6 +8,7 @@
 *.dylib
 # Environment
 .env
+*.onnx_data
 
 # OS files
 .DS_Store
