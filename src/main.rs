@@ -30,14 +30,8 @@ async fn main() -> Result<()> {
         config.max_file_size_bytes / (1024 * 1024)
     );
 
-    // Load Whisper model
-    info!("Loading Whisper ONNX model...");
-    let model =
-        whisper::WhisperModel::new(&config.model_dir).with_context(|| "Failed to load Whisper model")?;
-    info!("Whisper model loaded successfully");
-
-    // Create transcription service
-    let service = tools::TranscriptionService::new(config, model);
+    // Create transcription service (model is loaded lazily on first request)
+    let service = tools::TranscriptionService::new(config);
 
     // Start MCP server with stdio transport
     info!("Starting MCP server on stdio...");

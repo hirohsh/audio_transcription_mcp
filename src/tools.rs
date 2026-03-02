@@ -1,7 +1,7 @@
 use crate::audio;
 use crate::config::Config;
 use crate::whisper::WhisperModel;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::{schemars, tool, tool_handler, tool_router, ServerHandler};
 use schemars::JsonSchema;
@@ -19,40 +19,42 @@ pub struct TranscribeParams {
     pub language: Option<String>,
 }
 
+pub struct TranscriptionServiceInner {
+    config: Config,
+    model: Option<WhisperModel>,
+}
+
 #[derive(Clone)]
 pub struct TranscriptionService {
-    config: Arc<Config>,
-    model: Arc<WhisperModel>,
+    inner: Arc<std::sync::Mutex<TranscriptionServiceInner>>,
     tool_router: ToolRouter<Self>,
 }
 
 impl TranscriptionService {
-    pub fn new(config: Config, model: WhisperModel) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
-            config: Arc::new(config),
-            model: Arc::new(model),
+            inner: Arc::new(std::sync::Mutex::new(TranscriptionServiceInner {
+                config,
+                model: None,
+            })),
             tool_router: Self::tool_router(),
         }
     }
 
     fn do_transcribe(&self, file_path: &str, language: Option<&str>) -> Result<String> {
-        let path = PathBuf::from(file_path);
+        let mut inner = self.inner.lock().map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
 
-        // Resolve path relative to work_dir if not absolute
+        let path = PathBuf::from(file_path);
         let path = if path.is_absolute() {
             path
         } else {
-            self.config.work_dir.join(&path)
+            inner.config.work_dir.join(&path)
         };
 
-        // Validate path is within work directory
-        let canonical_path = self.config.validate_file_path(&path)?;
+        let canonical_path = inner.config.validate_file_path(&path)?;
         info!("Transcribing: {}", canonical_path.display());
+        inner.config.validate_file_size(&canonical_path)?;
 
-        // Validate file size
-        self.config.validate_file_size(&canonical_path)?;
-
-        // Load and preprocess audio
         info!("Loading audio file...");
         let samples = audio::load_audio(&canonical_path)?;
         info!(
@@ -61,8 +63,20 @@ impl TranscriptionService {
             samples.len() as f64 / 16000.0
         );
 
-        // Transcribe
-        let text = self.model.transcribe(&samples, language)?;
+        // Lazy-load model on first call
+        if inner.model.is_none() {
+            info!("Loading Whisper ONNX model (first request)...");
+            let model = WhisperModel::new(&inner.config.model_dir)
+                .with_context(|| format!(
+                    "Failed to load Whisper model from {}. Run: cd model_converter && uv run convert --model-size base --output-dir ../models",
+                    inner.config.model_dir.display()
+                ))?;
+            info!("Whisper model loaded successfully");
+            inner.model = Some(model);
+        }
+
+        let model = inner.model.as_ref().unwrap();
+        let text = model.transcribe(&samples, language)?;
         info!("Transcription complete: {} characters", text.len());
 
         Ok(text)
