@@ -53,7 +53,61 @@ impl WhisperModel {
         })
     }
 
+    /// Auto-detect and set ORT_DYLIB_PATH if not already configured.
+    fn ensure_ort_dylib_path() {
+        if std::env::var("ORT_DYLIB_PATH").is_ok() {
+            return;
+        }
+
+        let candidates: Vec<std::path::PathBuf> = {
+            let mut paths = Vec::new();
+
+            // Relative to executable: <exe_dir>/../../lib/
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(exe_dir) = exe.parent() {
+                    let lib_name = if cfg!(target_os = "windows") {
+                        "onnxruntime.dll"
+                    } else if cfg!(target_os = "macos") {
+                        "libonnxruntime.dylib"
+                    } else {
+                        "libonnxruntime.so"
+                    };
+                    // <exe_dir>/../../lib/ (e.g. target/release/../../lib/)
+                    paths.push(exe_dir.join("../../lib").join(lib_name));
+                    // <exe_dir>/../lib/
+                    paths.push(exe_dir.join("../lib").join(lib_name));
+                    // <exe_dir>/lib/
+                    paths.push(exe_dir.join("lib").join(lib_name));
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                paths.push(std::path::PathBuf::from(
+                    "/opt/homebrew/lib/libonnxruntime.dylib",
+                ));
+                paths.push(std::path::PathBuf::from(
+                    "/usr/local/lib/libonnxruntime.dylib",
+                ));
+            }
+
+            paths
+        };
+
+        for candidate in &candidates {
+            if candidate.exists() {
+                if let Ok(canonical) = candidate.canonicalize() {
+                    info!("Auto-detected ORT_DYLIB_PATH: {}", canonical.display());
+                    // SAFETY: Called once at startup before any threads are spawned.
+                    unsafe { std::env::set_var("ORT_DYLIB_PATH", &canonical) };
+                    return;
+                }
+            }
+        }
+    }
+
     fn init_onnx_runtime() -> Result<()> {
+        Self::ensure_ort_dylib_path();
         info!("Initializing ONNX Runtime...");
 
         // Try GPU execution providers first, fall back to CPU

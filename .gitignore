@@ -5,7 +5,7 @@
 /models/*.onnx
 /models/*.json
 /models/*.txt
-
+*.dylib
 # Environment
 .env
 
