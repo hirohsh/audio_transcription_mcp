@@ -1,0 +1,25 @@
+# Build artifacts
+/target/
+
+# ONNX models (large files)
+/models/*.onnx
+/models/*.json
+/models/*.txt
+
+# Environment
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+model_converter/.venv/
+__pycache__/
+*.pyc

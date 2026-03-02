@@ -1,0 +1,15 @@
+[project]
+name = "whisper-model-converter"
+version = "0.1.0"
+description = "Convert OpenAI Whisper models to ONNX format"
+requires-python = ">=3.10"
+dependencies = [
+    "optimum[onnxruntime]>=1.17.0",
+    "transformers>=4.36.0",
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+    "onnx>=1.14.0",
+]
+
+[project.scripts]
+convert = "src.convert:main"
